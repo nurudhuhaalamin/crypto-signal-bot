@@ -1,1 +1,37 @@
+name: Crypto Signal Bot
 
+on:
+  schedule:
+    - cron: '0 0,4,8,12,16,20 * * *'   # Setiap 4 jam (UTC): 00:00 04:00 08:00 12:00 16:00 20:00
+  workflow_dispatch:                      # Manual trigger untuk testing
+
+jobs:
+  run-signal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15                   # Paksa stop jika pipeline macet
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run signal pipeline
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python src/orchestrator.py
