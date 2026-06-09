@@ -8,17 +8,24 @@ SYMBOLS      = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT']
 TIMEFRAMES   = ['15m', '1h', '4h', '1d']
 CANDLE_LIMIT = 300          # Minimum untuk EMA200 (butuh 200) + 100 buffer
 
-# --- Bybit API ---
-# Ganti dari Binance ke Bybit — data sama (OHLCV, Funding Rate, Open Interest)
-# Bybit tidak memblokir request dari GitHub Actions.
-FUTURES_URL  = 'https://api.bybit.com'
+# --- OKX API ---
+# OKX public API dapat diakses dari GitHub Actions tanpa blokir.
+# Semua data futures (OHLCV, Funding Rate, Open Interest) tersedia gratis.
+FUTURES_URL  = 'https://www.okx.com'
 
-# Mapping timeframe bot → format interval Bybit
+# Mapping symbol internal → instId OKX (USDT Perpetual Swap)
+SYMBOL_MAP = {
+    'BTCUSDT': 'BTC-USDT-SWAP',
+    'ETHUSDT': 'ETH-USDT-SWAP',
+    'SOLUSDT': 'SOL-USDT-SWAP',
+}
+
+# Mapping timeframe bot → format bar OKX
 TIMEFRAME_MAP = {
-    '15m': '15',
-    '1h':  '60',
-    '4h':  '240',
-    '1d':  'D',
+    '15m': '15m',
+    '1h':  '1H',
+    '4h':  '4H',
+    '1d':  '1D',
 }
 
 # --- Parameter Indikator ---
@@ -56,7 +63,7 @@ MIN_SAMPLE_N          = 10   # Minimum setup serupa agar statistik valid
 # --- Backtest ---
 BACKTEST_DAYS         = 90   # Rolling window statistik (hari)
 
-# --- Rate Limiting ke Bybit ---
+# --- Rate Limiting ke OKX ---
 API_CALL_DELAY_SEC    = 0.3  # Jeda antar request (cegah rate limit)
 API_RETRY_COUNT       = 3    # Jumlah retry jika request gagal
 API_RETRY_DELAY_SEC   = 5    # Jeda antar retry (detik)
