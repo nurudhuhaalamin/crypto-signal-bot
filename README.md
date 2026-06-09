@@ -22,7 +22,7 @@ Bot sinyal trading crypto otomatis untuk **BTCUSDT**, **ETHUSDT**, dan **SOLUSDT
 ## Cara Kerja
 
 1. GitHub Actions menjalankan bot setiap 4 jam (00:00, 04:00, 08:00, 12:00, 16:00, 20:00 UTC)
-2. Bot mengambil data OHLCV, Funding Rate, dan Open Interest dari **Binance Futures API**
+2. Bot mengambil data OHLCV, Funding Rate, dan Open Interest dari **OKX Futures API**
 3. Indikator teknikal dihitung untuk 4 timeframe: 15m, 1H, 4H, 1D
 4. Sinyal hanya dibuat jika **4H dan 1D structure sepakat** dan **confluence score ≥ 60/100**
 5. Setiap sinyal divalidasi secara statistik (backtest 90 hari), dicek kelemahannya, dan divalidasi risk/reward-nya
@@ -38,7 +38,7 @@ Bot sinyal trading crypto otomatis untuk **BTCUSDT**, **ETHUSDT**, dan **SOLUSDT
             ▼
    PHASE 2: Data Layer
    fetch_all_data()
-   OHLCV 300 candle × 4 TF × 3 symbol  ← Binance Futures API
+   OHLCV 300 candle × 4 TF × 3 symbol  ← OKX Futures API
    + Funding Rate + Open Interest
             │
             ▼
@@ -82,7 +82,7 @@ crypto-signal-bot/
 ├── src/
 │   ├── config.py                   ← Semua konstanta & parameter (satu sumber kebenaran)
 │   │
-│   ├── data_collector.py           ← Fetch OHLCV, Funding Rate, Open Interest
+│   ├── data_collector.py           ← Fetch OHLCV, Funding Rate, Open Interest dari OKX
 │   │
 │   ├── indicator_engine.py         ← Kalkulasi semua indikator TA
 │   ├── mtf_confluence.py           ← Scoring multi-timeframe
@@ -93,7 +93,7 @@ crypto-signal-bot/
 │   ├── devil_advocate.py           ← Validasi RSI divergence, BB squeeze, funding conflict
 │   ├── risk_manager.py             ← Validasi RR & SL distance, position size informatif
 │   │
-│   ├── report_formatter.py         ← Format pesan Telegram
+│   ├── report_formatter.py         ← Format pesan Telegram (HTML)
 │   ├── orchestrator.py             ← Entry point utama
 │   │
 │   └── utils/
@@ -114,7 +114,7 @@ crypto-signal-bot/
 - Telegram Bot Token dari [@BotFather](https://t.me/BotFather)
 - Telegram Channel (bot sudah jadi admin)
 
-### Langkah 1 — Clone & Install
+### Langkah 1 — Fork atau Clone Repo
 
 ```bash
 git clone https://github.com/nurudhuh/crypto-signal-bot.git
@@ -129,7 +129,7 @@ Buka **Settings → Secrets and variables → Actions** di repo, tambahkan dua s
 | Secret Name | Isi |
 |---|---|
 | `TELEGRAM_BOT_TOKEN` | Token dari BotFather (format: `123456:ABC-DEF...`) |
-| `TELEGRAM_CHAT_ID` | Username channel (format: `@crypsibotchannel`) |
+| `TELEGRAM_CHAT_ID` | Username channel (format: `@namachannel`) |
 
 ### Langkah 3 — Deploy
 
@@ -143,10 +143,10 @@ Untuk **test manual** sebelum jadwal:
 
 ### Langkah 4 — Monitoring
 
-Bot wajib mengirim **minimal 1 pesan setiap 4 jam** ke channel:
-- Sinyal aktif (jika ada setup valid)
-- Market update (jika tidak ada setup)
-- Alert error (jika pipeline gagal)
+Bot mengirim **minimal 1 pesan setiap 4 jam** ke channel:
+- **Sinyal aktif** — jika ada setup yang lolos semua filter
+- **Market update** — jika tidak ada setup valid
+- **Alert error** — jika pipeline gagal
 
 Jika channel diam lebih dari 8 jam → cek tab **Actions** di GitHub untuk melihat log error.
 
@@ -172,8 +172,8 @@ Jika channel diam lebih dari 8 jam → cek tab **Actions** di GitHub untuk melih
 📉 Win Rate    : 61%  (23 setup serupa, 90 hari)
 💰 EV Score    : +0.34
 
-⚡ Funding Rate : +0.0100% (NETRAL)
-📦 Open Interest: NAIK — OI naik + harga naik → trend kuat
+⚡ Funding Rate  : +0.0100%
+📦 Open Interest : NAIK — OI naik + harga naik → trend kuat
 
 ⚠️ Bukan saran finansial. DYOR. Manajemen risiko ada di tangan Anda.
 ```
@@ -181,11 +181,11 @@ Jika channel diam lebih dari 8 jam → cek tab **Actions** di GitHub untuk melih
 ### Market Update (No Trade)
 
 ```
-📊 Market Update — 2026-06-01 08:00 UTC
+📊 Market Update — 2026-06-09 08:00 UTC
 
-📈 BTCUSDT  65,340.00  |  Struktur: UPTREND    |  Score: 58/100
-↔️  ETHUSDT   3,210.00  |  Struktur: RANGING    |  Score: 41/100
-📉 SOLUSDT    142.00   |  Struktur: DOWNTREND  |  Score: 33/100
+📉 BTCUSDT  62,391.00  |  Struktur: DOWNTREND  |  Score: 55/100
+📉 ETHUSDT   1,661.26  |  Struktur: DOWNTREND  |  Score: 58/100
+↔️ SOLUSDT     65.35  |  Struktur: RANGING    |  Score: 55/100
 
 ⏸ Tidak ada setup valid saat ini.
 Setup berikutnya dievaluasi dalam 4 jam.
@@ -268,6 +268,20 @@ Sinyal ditolak jika ≥ 2 flag ditemukan:
 | BB Squeeze | Width < persentil ke-20 tanpa konfirmasi breakout |
 | SL Distance | Jarak entry ke SL < 1× ATR |
 | Sample Size | Jumlah setup serupa < 10 |
+
+---
+
+## Sumber Data
+
+Bot menggunakan **OKX Futures API** (USDT Perpetual Swap) sebagai sumber data:
+
+| Data | Endpoint OKX |
+|---|---|
+| OHLCV | `/api/v5/market/candles` |
+| Funding Rate | `/api/v5/public/funding-rate` |
+| Open Interest | `/api/v5/public/open-interest` |
+
+OKX dipilih karena API publiknya dapat diakses dari GitHub Actions tanpa pembatasan IP, berbeda dengan Binance dan Bybit yang memblokir IP cloud provider.
 
 ---
 
