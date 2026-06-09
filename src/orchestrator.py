@@ -194,7 +194,7 @@ def main():
     all_data = fetch_all_data()
 
     if not all_data:
-        msg = f"⚠️ Run {run_str} gagal: Semua symbol gagal di-fetch dari Binance API."
+        msg = f"⚠️ Run {run_str} gagal: Semua symbol gagal di-fetch dari OKX API."
         logger.error(msg)
         send_health_check_alert(msg)
         sys.exit(1)

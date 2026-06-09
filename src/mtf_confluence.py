@@ -180,7 +180,7 @@ def calc_confluence(tf_data: dict, direction: str) -> dict:
     }
 
 
-def get_best_direction(tf_data: dict) -> str | None:
+def get_best_direction(tf_data: dict) -> tuple[str | None, dict, dict]:
     """
     Cek arah mana (LONG atau SHORT) yang punya skor konfluensi lebih tinggi.
     Dipakai oleh signal_generator sebelum membuat draft.

@@ -171,17 +171,21 @@ def _calc_tp(direction: str, entry_mid: float, sl: float,
 def _check_mfi(df_4h, direction: str) -> bool:
     """
     Return True jika MFI tidak ekstrem berlawanan arah.
-    Ekstrem = > 80 untuk SHORT signal, atau < 20 untuk LONG signal.
-    (MFI ekstrem berlawanan bisa jadi counter-signal)
+
+    LONG  → berbahaya jika MFI > 80 (overbought: momentum beli sudah exhausted)
+    SHORT → berbahaya jika MFI < 20 (oversold: momentum jual sudah exhausted)
+
+    MFI oversold (<20) justru MENDUKUNG sinyal LONG (reversal dari titik jenuh jual).
+    MFI overbought (>80) justru MENDUKUNG sinyal SHORT (reversal dari titik jenuh beli).
     """
     mfi = df_4h['mfi'].iloc[-1]
 
-    if direction == 'LONG' and mfi < 20:
-        logger.warning(f"MFI oversold ekstrem ({mfi:.1f}) — tidak biasa untuk LONG")
+    if direction == 'LONG' and mfi > 80:
+        logger.warning(f"MFI overbought ekstrem ({mfi:.1f}) — momentum beli sudah exhausted untuk LONG")
         return False
 
-    if direction == 'SHORT' and mfi > 80:
-        logger.warning(f"MFI overbought ekstrem ({mfi:.1f}) — tidak biasa untuk SHORT")
+    if direction == 'SHORT' and mfi < 20:
+        logger.warning(f"MFI oversold ekstrem ({mfi:.1f}) — momentum jual sudah exhausted untuk SHORT")
         return False
 
     return True

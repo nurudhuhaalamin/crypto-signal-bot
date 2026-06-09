@@ -50,10 +50,13 @@ def _calc_supertrend(df: pd.DataFrame, period: int, multiplier: float) -> pd.Ser
     upper = mid + multiplier * atr
     lower = mid - multiplier * atr
 
-    supertrend = pd.Series(index=df.index, dtype=float)
-    direction  = pd.Series(index=df.index, dtype=float)
+    # Gunakan list Python (bukan pd.Series) untuk menghindari pandas CoW issue
+    # saat assignment dalam loop. Convert ke Series di akhir.
+    n              = len(df)
+    direction_list = [np.nan] * n
+    st_list        = [np.nan] * n
 
-    for i in range(1, len(df)):
+    for i in range(1, n):
         # Update upper band — tidak boleh naik kalau sebelumnya sudah turun
         if upper.iloc[i] < upper.iloc[i - 1] or close.iloc[i - 1] > upper.iloc[i - 1]:
             final_upper = upper.iloc[i]
@@ -67,17 +70,21 @@ def _calc_supertrend(df: pd.DataFrame, period: int, multiplier: float) -> pd.Ser
             final_lower = lower.iloc[i - 1]
 
         # Tentukan arah
-        prev_dir = direction.iloc[i - 1] if i > 1 else 1
+        prev_dir = direction_list[i - 1] if i > 1 else 1
+        if np.isnan(prev_dir):
+            prev_dir = 1
+
         if prev_dir == -1 and close.iloc[i] > final_upper:
-            direction.iloc[i] = 1   # Bullish
+            new_dir = 1    # Bullish
         elif prev_dir == 1 and close.iloc[i] < final_lower:
-            direction.iloc[i] = -1  # Bearish
+            new_dir = -1   # Bearish
         else:
-            direction.iloc[i] = prev_dir
+            new_dir = prev_dir
 
-        supertrend.iloc[i] = final_lower if direction.iloc[i] == 1 else final_upper
+        direction_list[i] = new_dir
+        st_list[i]        = final_lower if new_dir == 1 else final_upper
 
-    return direction
+    return pd.Series(direction_list, index=df.index, dtype=float)
 
 
 # =============================================================================

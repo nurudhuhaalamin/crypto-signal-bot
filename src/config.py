@@ -6,7 +6,7 @@
 # --- Target Asset & Timeframe ---
 SYMBOLS      = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT']
 TIMEFRAMES   = ['15m', '1h', '4h', '1d']
-CANDLE_LIMIT = 300          # Minimum untuk EMA200 (butuh 200) + 100 buffer
+CANDLE_LIMIT = 800          # EMA200 warmup (200) + backtest 90 hari × 6 candle/hari (540) + buffer (60)
 
 # --- OKX API ---
 # OKX public API dapat diakses dari GitHub Actions tanpa blokir.
