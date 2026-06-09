@@ -8,10 +8,18 @@ SYMBOLS      = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT']
 TIMEFRAMES   = ['15m', '1h', '4h', '1d']
 CANDLE_LIMIT = 300          # Minimum untuk EMA200 (butuh 200) + 100 buffer
 
-# --- Binance API ---
-# Semua endpoint dari Futures API agar harga OHLCV konsisten
-# dengan Funding Rate dan Open Interest.
-FUTURES_URL  = 'https://fapi.binance.com'
+# --- Bybit API ---
+# Ganti dari Binance ke Bybit — data sama (OHLCV, Funding Rate, Open Interest)
+# Bybit tidak memblokir request dari GitHub Actions.
+FUTURES_URL  = 'https://api.bybit.com'
+
+# Mapping timeframe bot → format interval Bybit
+TIMEFRAME_MAP = {
+    '15m': '15',
+    '1h':  '60',
+    '4h':  '240',
+    '1d':  'D',
+}
 
 # --- Parameter Indikator ---
 EMA_FAST              = 21
@@ -48,7 +56,7 @@ MIN_SAMPLE_N          = 10   # Minimum setup serupa agar statistik valid
 # --- Backtest ---
 BACKTEST_DAYS         = 90   # Rolling window statistik (hari)
 
-# --- Rate Limiting ke Binance ---
+# --- Rate Limiting ke Bybit ---
 API_CALL_DELAY_SEC    = 0.3  # Jeda antar request (cegah rate limit)
 API_RETRY_COUNT       = 3    # Jumlah retry jika request gagal
 API_RETRY_DELAY_SEC   = 5    # Jeda antar retry (detik)

@@ -1,8 +1,8 @@
 # =============================================================================
 # data_collector.py — Data Layer
-# Fetch semua data market dari Binance Futures API.
-# Semua endpoint dari fapi.binance.com agar OHLCV konsisten
-# dengan Funding Rate dan Open Interest.
+# Fetch semua data market dari Bybit Futures API (USDT Perpetual).
+# Ganti dari Binance karena Binance memblokir IP GitHub Actions.
+# Data yang diambil sama: OHLCV, Funding Rate, Open Interest.
 # =============================================================================
 
 import time
@@ -10,7 +10,7 @@ import requests
 import pandas as pd
 
 from config import (
-    SYMBOLS, TIMEFRAMES, CANDLE_LIMIT, FUTURES_URL,
+    SYMBOLS, TIMEFRAMES, CANDLE_LIMIT, FUTURES_URL, TIMEFRAME_MAP,
     API_CALL_DELAY_SEC, API_RETRY_COUNT, API_RETRY_DELAY_SEC
 )
 from utils.logger import get_logger
@@ -22,9 +22,9 @@ logger = get_logger(__name__)
 # Helper: Request dengan Retry
 # =============================================================================
 
-def _get(endpoint: str, params: dict) -> dict | list:
+def _get(endpoint: str, params: dict) -> dict:
     """
-    Kirim GET request ke Binance Futures API dengan retry otomatis.
+    Kirim GET request ke Bybit API dengan retry otomatis.
     Jika semua retry gagal, raise Exception.
     """
     url = FUTURES_URL + endpoint
@@ -34,7 +34,14 @@ def _get(endpoint: str, params: dict) -> dict | list:
             response = requests.get(url, params=params, timeout=10)
 
             if response.status_code == 200:
-                return response.json()
+                data = response.json()
+                # Bybit mengembalikan retCode=0 jika sukses
+                if data.get('retCode') == 0:
+                    return data
+                raise Exception(
+                    f"Bybit API error — retCode {data.get('retCode')}: "
+                    f"{data.get('retMsg', 'unknown')}"
+                )
 
             logger.warning(
                 f"HTTP {response.status_code} dari {endpoint} "
@@ -59,7 +66,7 @@ def _get(endpoint: str, params: dict) -> dict | list:
 
 def fetch_ohlcv(symbol: str, tf: str, limit: int = CANDLE_LIMIT) -> pd.DataFrame:
     """
-    Fetch data candlestick (OHLCV) dari Binance Futures.
+    Fetch data candlestick (OHLCV) dari Bybit Futures.
 
     Return:
         DataFrame dengan kolom: open, high, low, close, volume
@@ -67,29 +74,35 @@ def fetch_ohlcv(symbol: str, tf: str, limit: int = CANDLE_LIMIT) -> pd.DataFrame
     """
     logger.info(f"Fetching OHLCV {symbol} {tf} ({limit} candles)...")
 
-    raw = _get('/fapi/v1/klines', {
-        'symbol': symbol,
-        'interval': tf,
-        'limit': limit
+    bybit_interval = TIMEFRAME_MAP[tf]
+
+    data = _get('/v5/market/kline', {
+        'category': 'linear',
+        'symbol':   symbol,
+        'interval': bybit_interval,
+        'limit':    limit,
     })
 
-    # Binance klines: [open_time, open, high, low, close, volume, ...]
+    # Bybit klines: [startTime, open, high, low, close, volume, turnover]
+    # Urutan: TERBARU dulu → harus di-reverse agar index ascending
+    raw = data['result']['list']
+    raw = list(reversed(raw))
+
     df = pd.DataFrame(raw, columns=[
-        'open_time', 'open', 'high', 'low', 'close', 'volume',
-        'close_time', 'quote_volume', 'trades',
-        'taker_buy_base', 'taker_buy_quote', 'ignore'
+        'open_time', 'open', 'high', 'low', 'close', 'volume', 'turnover'
     ])
 
-    # Konversi tipe data
-    df['open_time'] = pd.to_datetime(df['open_time'], unit='ms', utc=True)
+    df['open_time'] = pd.to_datetime(df['open_time'].astype('int64'), unit='ms', utc=True)
     for col in ['open', 'high', 'low', 'close', 'volume']:
         df[col] = df[col].astype(float)
 
     df = df.set_index('open_time')
     df = df[['open', 'high', 'low', 'close', 'volume']]
 
-    logger.info(f"OHLCV {symbol} {tf} — {len(df)} candles, "
-                f"dari {df.index[0]} s/d {df.index[-1]}")
+    logger.info(
+        f"OHLCV {symbol} {tf} — {len(df)} candles, "
+        f"dari {df.index[0]} s/d {df.index[-1]}"
+    )
 
     return df
 
@@ -100,7 +113,7 @@ def fetch_ohlcv(symbol: str, tf: str, limit: int = CANDLE_LIMIT) -> pd.DataFrame
 
 def fetch_funding_rate(symbol: str) -> float:
     """
-    Fetch funding rate terbaru untuk satu symbol.
+    Fetch funding rate terbaru untuk satu symbol dari Bybit.
 
     Return:
         float — funding rate (contoh: 0.0001 = +0.01%)
@@ -109,12 +122,13 @@ def fetch_funding_rate(symbol: str) -> float:
     """
     logger.info(f"Fetching funding rate {symbol}...")
 
-    raw = _get('/fapi/v1/fundingRate', {
-        'symbol': symbol,
-        'limit': 1
+    data = _get('/v5/market/funding/history', {
+        'category': 'linear',
+        'symbol':   symbol,
+        'limit':    1,
     })
 
-    rate = float(raw[-1]['fundingRate'])
+    rate = float(data['result']['list'][0]['fundingRate'])
     logger.info(f"Funding rate {symbol}: {rate:+.4%}")
     return rate
 
@@ -125,7 +139,7 @@ def fetch_funding_rate(symbol: str) -> float:
 
 def fetch_open_interest(symbol: str) -> float:
     """
-    Fetch open interest terbaru untuk satu symbol.
+    Fetch open interest terbaru untuk satu symbol dari Bybit.
 
     Return:
         float — jumlah kontrak open interest saat ini
@@ -135,9 +149,14 @@ def fetch_open_interest(symbol: str) -> float:
     """
     logger.info(f"Fetching open interest {symbol}...")
 
-    raw = _get('/fapi/v1/openInterest', {'symbol': symbol})
+    data = _get('/v5/market/open-interest', {
+        'category':     'linear',
+        'symbol':       symbol,
+        'intervalTime': '4h',
+        'limit':        1,
+    })
 
-    oi = float(raw['openInterest'])
+    oi = float(data['result']['list'][0]['openInterest'])
     logger.info(f"Open interest {symbol}: {oi:,.2f}")
     return oi
 
@@ -170,7 +189,7 @@ def fetch_all_data() -> dict:
         Symbol yang gagal di-fetch akan di-skip (tidak masuk dict).
         Jika semua symbol gagal, return dict kosong {}.
     """
-    logger.info("=== Memulai fetch semua data market ===")
+    logger.info("=== Memulai fetch semua data market (Bybit) ===")
     all_data = {}
     failed_symbols = []
 
@@ -182,7 +201,7 @@ def fetch_all_data() -> dict:
             # Fetch OHLCV untuk setiap timeframe
             for tf in TIMEFRAMES:
                 symbol_data['ohlcv'][tf] = fetch_ohlcv(symbol, tf)
-                time.sleep(API_CALL_DELAY_SEC)  # Rate limit guard
+                time.sleep(API_CALL_DELAY_SEC)
 
             # Fetch Funding Rate
             symbol_data['funding_rate'] = fetch_funding_rate(symbol)
@@ -200,7 +219,7 @@ def fetch_all_data() -> dict:
             failed_symbols.append(symbol)
 
     # Evaluasi hasil
-    total = len(SYMBOLS)
+    total   = len(SYMBOLS)
     success = len(all_data)
     logger.info(f"=== Fetch selesai: {success}/{total} symbol berhasil ===")
 
@@ -209,7 +228,6 @@ def fetch_all_data() -> dict:
 
     if success == 0:
         logger.error("Semua symbol gagal di-fetch. Pipeline dihentikan.")
-        # Return dict kosong — orchestrator.py yang akan handle alert & exit
         return {}
 
     return all_data
