@@ -2,13 +2,27 @@
 # report_formatter.py — Output Layer (5.1)
 # Format signal_final atau market update menjadi pesan Telegram siap kirim.
 # Input : signal_final dict (atau list market update)
-# Output: string pesan berformat Markdown
+# Output: string pesan berformat MarkdownV2
 # =============================================================================
 
+import re
 from datetime import datetime, timezone
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+# =============================================================================
+# Helper: Escape MarkdownV2
+# =============================================================================
+
+def _esc(text) -> str:
+    """
+    Escape semua karakter spesial MarkdownV2 Telegram.
+    Wajib dipakai pada semua nilai dinamis (harga, simbol, timestamp, dll).
+    Karakter: _ * [ ] ( ) ~ ` > # + - = | { } . !
+    """
+    return re.sub(r'([_*\[\]()~`>#+\-=|{}.!])', r'\\\1', str(text))
 
 
 # =============================================================================
@@ -53,20 +67,6 @@ def _structure_emoji(structure: str) -> str:
 # =============================================================================
 
 def format_signal(signal_final: dict) -> str:
-    """
-    Format signal_final menjadi pesan Telegram untuk sinyal aktif.
-
-    Contoh output:
-        🟢 LONG Signal — BTCUSDT
-        ⏱ Timeframe: 4H  |  🔥 Confidence: HIGH
-        ...
-
-    Parameter:
-        signal_final : output validate_risk() dari risk_manager
-
-    Return:
-        string pesan berformat Markdown
-    """
     symbol     = signal_final['symbol']
     direction  = signal_final['direction']
     confidence = signal_final['confidence']
@@ -86,51 +86,48 @@ def format_signal(signal_final: dict) -> str:
     tp3_pct = signal_final.get('tp3_pct_from_entry', 0)
     sl_pct  = signal_final.get('sl_pct_from_entry', 0)
 
-    confluence  = signal_final['confluence']
+    confluence   = signal_final['confluence']
     tfs_agreeing = signal_final.get('tfs_agreeing', 0)
-    win_rate    = signal_final['win_rate']
-    ev          = signal_final['ev']
-    sample_n    = signal_final['sample_n']
+    win_rate     = signal_final['win_rate']
+    ev           = signal_final['ev']
+    sample_n     = signal_final['sample_n']
 
-    derivatives = signal_final.get('derivatives', {})
+    derivatives   = signal_final.get('derivatives', {})
     funding_label = derivatives.get('funding_label', 'NETRAL')
     oi_label      = derivatives.get('oi_label', 'STABIL')
     oi_signal     = derivatives.get('oi_signal', '')
 
-    # Funding rate display
     funding_raw = signal_final.get('funding_rate_raw', None)
     if funding_raw is not None:
-        funding_display = _fmt_funding(funding_raw)
+        funding_display = _esc(_fmt_funding(funding_raw))
     else:
-        funding_display = f"({funding_label})"
+        funding_display = _esc(f"({funding_label})")
 
-    # OI display
-    oi_display = f"{oi_label} — {oi_signal}" if oi_signal else oi_label
+    oi_display = _esc(f"{oi_label} — {oi_signal}" if oi_signal else oi_label)
 
-    # Flags dari devil advocate (jika MODIFIED)
     flags = signal_final.get('flags', [])
     flags_section = ""
     if flags:
-        flags_text = "\n".join(f"  • {f}" for f in flags)
-        flags_section = f"\n\n⚠️ *Catatan (MODIFIED):*\n{flags_text}"
+        flags_text = "\n".join(f"  • {_esc(f)}" for f in flags)
+        flags_section = f"\n\n⚠️ *Catatan \\(MODIFIED\\):*\n{flags_text}"
 
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    timestamp = _esc(datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"))
 
     msg = (
-        f"{_direction_emoji(direction)} *{direction} Signal — {symbol}*\n"
-        f"⏱ Timeframe: 4H  |  {_confidence_emoji(confidence)} Confidence: {confidence}\n"
+        f"{_direction_emoji(direction)} *{_esc(direction)} Signal — {_esc(symbol)}*\n"
+        f"⏱ Timeframe: 4H  |  {_confidence_emoji(confidence)} Confidence: {_esc(confidence)}\n"
         f"\n"
-        f"📍 *Entry Zone :* {_fmt_price(entry_low)} – {_fmt_price(entry_high)}\n"
-        f"🎯 *TP1        :* {_fmt_price(tp1)}  ({_fmt_pct(tp1_pct)})\n"
-        f"🎯 *TP2        :* {_fmt_price(tp2)}  ({_fmt_pct(tp2_pct)})\n"
-        f"🎯 *TP3        :* {_fmt_price(tp3)}  ({_fmt_pct(tp3_pct)})\n"
-        f"🛡 *Stop Loss  :* {_fmt_price(sl)}  ({_fmt_pct(sl_pct)})\n"
-        f"⚖️ *Risk/Reward :* 1 : {rr}\n"
+        f"📍 *Entry Zone :* {_esc(_fmt_price(entry_low))} – {_esc(_fmt_price(entry_high))}\n"
+        f"🎯 *TP1        :* {_esc(_fmt_price(tp1))}  \\({_esc(_fmt_pct(tp1_pct))}\\)\n"
+        f"🎯 *TP2        :* {_esc(_fmt_price(tp2))}  \\({_esc(_fmt_pct(tp2_pct))}\\)\n"
+        f"🎯 *TP3        :* {_esc(_fmt_price(tp3))}  \\({_esc(_fmt_pct(tp3_pct))}\\)\n"
+        f"🛡 *Stop Loss  :* {_esc(_fmt_price(sl))}  \\({_esc(_fmt_pct(sl_pct))}\\)\n"
+        f"⚖️ *Risk/Reward :* 1 : {_esc(rr)}\n"
         f"\n"
-        f"{_structure_emoji(structure)} *Struktur :* {structure} (4H) & {structure_1d} (1D)\n"
-        f"🔗 *Confluence :* {confluence}/100  ({tfs_agreeing} dari 4 TF sepakat)\n"
-        f"📉 *Win Rate   :* {win_rate:.0%}  ({sample_n} setup serupa, 90 hari)\n"
-        f"💰 *EV Score   :* {ev:+.2f}\n"
+        f"{_structure_emoji(structure)} *Struktur :* {_esc(structure)} \\(4H\\) & {_esc(structure_1d)} \\(1D\\)\n"
+        f"🔗 *Confluence :* {_esc(confluence)}/100  \\({_esc(tfs_agreeing)} dari 4 TF sepakat\\)\n"
+        f"📉 *Win Rate   :* {_esc(f'{win_rate:.0%}')}  \\({_esc(sample_n)} setup serupa, 90 hari\\)\n"
+        f"💰 *EV Score   :* {_esc(f'{ev:+.2f}')}\n"
         f"\n"
         f"⚡ *Funding Rate :* {funding_display}\n"
         f"📦 *Open Interest:* {oi_display}"
@@ -149,23 +146,8 @@ def format_signal(signal_final: dict) -> str:
 # Format: Market Update (No Trade)
 # =============================================================================
 
-def format_market_update(market_snapshots: list[dict]) -> str:
-    """
-    Format pesan market update ketika tidak ada sinyal valid.
-
-    Parameter:
-        market_snapshots : list of dict, satu per symbol:
-            {
-                'symbol'    : 'BTCUSDT',
-                'price'     : 65340.0,
-                'structure' : 'UPTREND',
-                'score'     : 58,
-            }
-
-    Return:
-        string pesan berformat Markdown
-    """
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+def format_market_update(market_snapshots: list) -> str:
+    timestamp = _esc(datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"))
 
     lines = [
         f"📊 *Market Update — {timestamp}*\n"
@@ -179,8 +161,8 @@ def format_market_update(market_snapshots: list[dict]) -> str:
         emoji     = _structure_emoji(structure)
 
         lines.append(
-            f"{emoji} *{symbol}*  {_fmt_price(price)}  |  "
-            f"Struktur: {structure}  |  Score: {score}/100"
+            f"{emoji} *{_esc(symbol)}*  {_esc(_fmt_price(price))}  |  "
+            f"Struktur: {_esc(structure)}  |  Score: {_esc(score)}/100"
         )
 
     lines.append(
@@ -200,14 +182,8 @@ def format_market_update(market_snapshots: list[dict]) -> str:
 
 def format_error_alert(timestamp: str, error_summary: str) -> str:
     """
-    Format pesan alert error kritis untuk health check.
-
-    Parameter:
-        timestamp     : string waktu run (ISO atau human-readable)
-        error_summary : ringkasan error yang terjadi
-
-    Return:
-        string pesan berformat Markdown
+    Dikirim via send_health_check_alert (parse_mode HTML / plain text).
+    Tidak perlu MarkdownV2 escaping.
     """
     msg = (
         f"⚠️ *Run Gagal*\n"
